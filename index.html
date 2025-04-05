@@ -317,23 +317,15 @@
             return { x, y };
         }
 
+        // Mouse events (click only, no dragging)
         canvas.addEventListener('mousedown', (e) => {
             const pos = getPosition(e);
             mouseX = pos.x;
             mouseY = pos.y;
-            dragging = true;
             handleClick();
         });
 
-        canvas.addEventListener('mousemove', (e) => {
-            const pos = getPosition(e);
-            mouseX = pos.x;
-            mouseY = pos.y;
-            if (dragging) handleClick();
-        });
-
-        canvas.addEventListener('mouseup', () => dragging = false);
-
+        // Touch events (supports dragging)
         canvas.addEventListener('touchstart', (e) => {
             e.preventDefault();
             const pos = getPosition(e, true);
@@ -455,7 +447,7 @@
                 ctx.fillText(`${difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}`, 15 * scaleFactor, 65 * scaleFactor);
                 drawHearts(lives);
 
-                if (dragging) {
+                if (dragging && isRotated) { // Show touch indicator only on mobile in horizontal mode
                     ctx.beginPath();
                     ctx.arc(mouseX, mouseY, 10 * scaleFactor, 0, Math.PI * 2);
                     ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
