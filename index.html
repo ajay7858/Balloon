@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Balloon Pop Adventure</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: #000;
+        }
+        canvas {
+            display: block;
+            touch-action: none; /* Prevents default touch behaviors */
+        }
+        @media (max-width: 600px) {
+            canvas {
+                width: 100vw;
+                height: 100vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Screen dimensions
+        const WIDTH = 800;
+        const HEIGHT = 600;
+        canvas.width = WIDTH;
+        canvas.height = HEIGHT;
+
+        // Colors
+        const SKY_GRADIENT_TOP = 'rgb(100, 180, 255)';
+        const SKY_GRADIENT_BOTTOM = 'rgb(180, 230, 255)';
+        const RED = 'rgb(255, 80, 80)';
+        const GREEN = 'rgb(60, 220, 60)';
+        const BLUE = 'rgb(70, 130, 255)';
+        const YELLOW = 'rgb(255, 230, 50)';
+        const PURPLE = 'rgb(160, 100, 255)';
+        const ORANGE = 'rgb(255, 140, 0)';
+        const PINK = 'rgb(255, 120, 200)';
+        const WHITE = 'rgb(255, 255, 255)';
+        const BLACK = 'rgb(30, 30, 30)';
+        const GREY = 'rgb(100, 100, 100)';
+        const COLORS = [RED, GREEN, BLUE, YELLOW, PURPLE, ORANGE, PINK];
+
+        // Game state
+        let state = 'home';
+        let difficulty = null;
+        let balloons = [];
+        let score = 0;
+        let lives = 3;
+        let timeSurvived = 0;
+        let spawnTimer = 0;
+        let bombTimer = 0;
+        let dragging = false;
+        let bombTriggered = false;
+        let startTime;
+        let mouseX = 0, mouseY = 0;
+
+        // Button class
+        class Button {
+            constructor(x, y, width, height, text, color, hoverColor) {
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+                this.text = text;
+                this.color = color;
+                this.hoverColor = hoverColor;
+                this.isHovered = false;
+            }
+
+            draw() {
+                ctx.fillStyle = this.isHovered ? this.hoverColor : this.color;
+                ctx.beginPath();
+                ctx.roundRect(this.x, this.y, this.width, this.height, 20);
+                ctx.fill();
+                ctx.strokeStyle = BLACK;
+                ctx.lineWidth = 4;
+                ctx.stroke();
+
+                ctx.fillStyle = BLACK;
+                ctx.font = 'bold 40px Comic Sans MS';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(this.text, this.x + this.width / 2, this.y + this.height / 2);
+            }
+
+            checkHover(x, y) {
+                this.isHovered = x >= this.x && x <= this.x + this.width && 
+                                 y >= this.y && y <= this.y + this.height;
+                return this.isHovered;
+            }
+
+            isClicked(x, y) {
+                return this.checkHover(x, y);
+            }
+        }
+
+        // Balloon class
+        class Balloon {
+            constructor(speedRange, isBomb = false) {
+                this.radius = Math.random() * 20 + 35;
+                this.x = Math.random() * (WIDTH - 2 * this.radius) + this.radius;
+                this.y = HEIGHT + this.radius;
+                this.color = isBomb ? GREY : COLORS[Math.floor(Math.random() * COLORS.length)];
+                this.speed = Math.random() * (speedRange[1] - speedRange[0]) + speedRange[0];
+                this.popped = false;
+                this.isBomb = isBomb;
+                this.popAnimation = 0;
+            }
+
+            rise() {
+                this.y -= this.speed;
+                if (this.popAnimation > 0) this.popAnimation--;
+            }
+
+            pop() {
+                this.popped = true;
+                this.popAnimation = 10;
+            }
+
+            draw() {
+                if (this.popAnimation > 0) {
+                    let shrinkFactor = this.popAnimation / 10;
+                    let radius = this.radius * shrinkFactor;
+                    if (radius > 0) {
+                        ctx.beginPath();
+                        ctx.arc(this.x, this.y, radius, 0, Math.PI * 2);
+                        ctx.fillStyle = this.color;
+                        ctx.fill();
+                    }
+                    return;
+                }
+
+                if (!this.popped) {
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = this.color;
+                    ctx.fill();
+
+                    ctx.beginPath();
+                    ctx.arc(this.x - this.radius / 3, this.y - this.radius / 3, this.radius / 2, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(${this.color.match(/\d+/g).map(c => Math.min(parseInt(c) + 60, 255)).join(',')}, 1)`;
+                    ctx.fill();
+
+                    ctx.beginPath();
+                    ctx.moveTo(this.x, this.y - this.radius);
+                    ctx.lineTo(this.x - 8, this.y - this.radius - 15);
+                    ctx.lineTo(this.x + 8, this.y - this.radius - 15);
+                    ctx.closePath();
+                    ctx.fillStyle = `rgba(${this.color.match(/\d+/g).map(c => Math.floor(c / 2)).join(',')}, 1)`;
+                    ctx.fill();
+
+                    if (this.isBomb) {
+                        ctx.fillStyle = WHITE;
+                        ctx.font = 'bold 28px Comic Sans MS';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText('BOOM', this.x, this.y);
+                    }
+                }
+            }
+
+            isClicked(x, y) {
+                if (this.popped || this.popAnimation > 0) return false;
+                const distance = Math.sqrt((x - this.x) ** 2 + (y - this.y) ** 2);
+                return distance <= this.radius;
+            }
+        }
+
+        // Draw hearts
+        function drawHearts(lives) {
+            for (let i = 0; i < 3; i++) {
+                let x = WIDTH - (4 - i) * (40 + 15);
+                let y = 25;
+                let centerX = x + 20;
+                let centerY = y + 20;
+
+                if (i < lives) {
+                    ctx.fillStyle = RED;
+                    ctx.beginPath();
+                    ctx.arc(centerX - 10, centerY - 6, 10, Math.PI, 0);
+                    ctx.arc(centerX + 10, centerY - 6, 10, Math.PI, 0);
+                    ctx.lineTo(centerX, centerY + 20);
+                    ctx.closePath();
+                    ctx.fill();
+
+                    ctx.beginPath();
+                    ctx.arc(centerX - 10, centerY - 10, 5, 0, Math.PI * 2);
+                    ctx.fillStyle = 'rgba(255, 150, 150, 1)';
+                    ctx.fill();
+                } else {
+                    ctx.fillStyle = 'rgb(220, 220, 220)';
+                    ctx.beginPath();
+                    ctx.arc(centerX - 10, centerY - 6, 10, Math.PI, 0);
+                    ctx.arc(centerX + 10, centerY - 6, 10, Math.PI, 0);
+                    ctx.lineTo(centerX, centerY + 20);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+            }
+        }
+
+        // Draw background
+        function drawBackground() {
+            const gradient = ctx.createLinearGradient(0, 0, 0, HEIGHT);
+            gradient.addColorStop(0, SKY_GRADIENT_TOP);
+            gradient.addColorStop(1, SKY_GRADIENT_BOTTOM);
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            ctx.beginPath();
+            ctx.arc(140, 100, 30, 0, Math.PI * 2);
+            ctx.arc(180, 100, 40, 0, Math.PI * 2);
+            ctx.arc(160, 120, 30, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(590, 120, 30, 0, Math.PI * 2);
+            ctx.arc(630, 120, 40, 0, Math.PI * 2);
+            ctx.arc(610, 140, 30, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Buttons
+        const easyBtn = new Button(WIDTH / 2 - 160, 250, 320, 70, "Easy", GREEN, 'rgb(150, 255, 150)');
+        const moderateBtn = new Button(WIDTH / 2 - 160, 340, 320, 70, "Moderate", YELLOW, 'rgb(255, 255, 100)');
+        const hardBtn = new Button(WIDTH / 2 - 160, 430, 320, 70, "Hard", RED, 'rgb(255, 150, 150)');
+        const playAgainBtn = new Button(WIDTH / 2 - 160, 350, 320, 70, "Play Again", GREEN, 'rgb(150, 255, 150)');
+        const homeBtn = new Button(WIDTH / 2 - 160, 450, 320, 70, "Home", BLUE, 'rgb(150, 200, 255)');
+
+        // Event handling
+        function getPosition(e, isTouch = false) {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = isTouch ? e.touches[0].clientX : e.clientX;
+            const clientY = isTouch ? e.touches[0].clientY : e.clientY;
+            return {
+                x: (clientX - rect.left) * (WIDTH / rect.width),
+                y: (clientY - rect.top) * (HEIGHT / rect.height)
+            };
+        }
+
+        canvas.addEventListener('mousedown', (e) => {
+            const pos = getPosition(e);
+            mouseX = pos.x;
+            mouseY = pos.y;
+            dragging = true;
+            handleClick();
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            const pos = getPosition(e);
+            mouseX = pos.x;
+            mouseY = pos.y;
+            if (dragging) handleClick();
+        });
+
+        canvas.addEventListener('mouseup', () => dragging = false);
+
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const pos = getPosition(e, true);
+            mouseX = pos.x;
+            mouseY = pos.y;
+            dragging = true;
+            handleClick();
+        });
+
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            const pos = getPosition(e, true);
+            mouseX = pos.x;
+            mouseY = pos.y;
+            if (dragging) handleClick();
+        });
+
+        canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            dragging = false;
+        });
+
+        function handleClick() {
+            if (state === 'home') {
+                if (easyBtn.isClicked(mouseX, mouseY)) {
+                    difficulty = 'easy';
+                    startGame([1, 2]);
+                } else if (moderateBtn.isClicked(mouseX, mouseY)) {
+                    difficulty = 'moderate';
+                    startGame([2, 3]);
+                } else if (hardBtn.isClicked(mouseX, mouseY)) {
+                    difficulty = 'hard';
+                    startGame([3, 5]);
+                }
+            } else if (state === 'game') {
+                for (let i = balloons.length - 1; i >= 0; i--) {
+                    if (balloons[i].isClicked(mouseX, mouseY)) {
+                        if (balloons[i].isBomb) {
+                            bombTriggered = true;
+                            state = 'gameOver';
+                        } else {
+                            balloons[i].pop();
+                            score += 1 + { easy: 0, moderate: 1, hard: 2 }[difficulty];
+                        }
+                        break;
+                    }
+                }
+            } else if (state === 'gameOver') {
+                if (playAgainBtn.isClicked(mouseX, mouseY)) {
+                    startGame({ easy: [1, 2], moderate: [2, 3], hard: [3, 5] }[difficulty]);
+                } else if (homeBtn.isClicked(mouseX, mouseY)) {
+                    state = 'home';
+                }
+            }
+        }
+
+        function startGame(speedRange) {
+            balloons = [];
+            score = 0;
+            lives = 3;
+            spawnTimer = 0;
+            bombTimer = 0;
+            bombTriggered = false;
+            startTime = Date.now();
+            state = 'game';
+        }
+
+        // Game loop
+        function gameLoop() {
+            drawBackground();
+
+            if (state === 'home') {
+                ctx.fillStyle = BLACK;
+                ctx.font = 'bold 80px Comic Sans MS';
+                ctx.textAlign = 'center';
+                ctx.fillText('Balloon Pop', WIDTH / 2, 100);
+                ctx.fillText('Adventure', WIDTH / 2, 180);
+                ctx.font = '28px Comic Sans MS';
+                ctx.fillText('Save your hearts, avoid the bombs!', WIDTH / 2, 230);
+
+                easyBtn.checkHover(mouseX, mouseY);
+                moderateBtn.checkHover(mouseX, mouseY);
+                hardBtn.checkHover(mouseX, mouseY);
+                easyBtn.draw();
+                moderateBtn.draw();
+                hardBtn.draw();
+            } else if (state === 'game') {
+                spawnTimer++;
+                const spawnRate = { easy: 50, moderate: 40, hard: 30 }[difficulty];
+                if (spawnTimer >= spawnRate) {
+                    const isBomb = Math.random() < 0.1 && bombTimer > 120;
+                    balloons.push(new Balloon({ easy: [1, 2], moderate: [2, 3], hard: [3, 5] }[difficulty], isBomb));
+                    spawnTimer = 0;
+                    if (isBomb) bombTimer = 0;
+                }
+                bombTimer++;
+
+                for (let i = balloons.length - 1; i >= 0; i--) {
+                    balloons[i].rise();
+                    balloons[i].draw();
+                    if (balloons[i].popAnimation === 1) {
+                        balloons.splice(i, 1);
+                    } else if (balloons[i].y + balloons[i].radius < 0) {
+                        if (!balloons[i].isBomb) lives--;
+                        balloons.splice(i, 1);
+                        if (lives <= 0) {
+                            bombTriggered = false;
+                            state = 'gameOver';
+                        }
+                    }
+                }
+
+                ctx.fillStyle = BLACK;
+                ctx.font = '28px Comic Sans MS';
+                ctx.textAlign = 'left';
+                ctx.fillText(`Score: ${score}`, 15, 35);
+                ctx.fillText(`${difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}`, 15, 65);
+                drawHearts(lives);
+
+                if (dragging) {
+                    ctx.beginPath();
+                    ctx.arc(mouseX, mouseY, 10, 0, Math.PI * 2);
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
+
+                timeSurvived = (Date.now() - startTime) / 1000;
+            } else if (state === 'gameOver') {
+                ctx.fillStyle = 'rgba(40, 40, 40, 0.85)';
+                ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+                ctx.fillStyle = WHITE;
+                ctx.font = 'bold 80px Comic Sans MS';
+                ctx.textAlign = 'center';
+                ctx.fillText('Game Over!', WIDTH / 2, 150);
+                ctx.font = '28px Comic Sans MS';
+                ctx.fillText(bombTriggered ? 'Bomb Exploded!' : 'No Hearts Left!', WIDTH / 2, 220);
+                ctx.fillText(`Score: ${score}`, WIDTH / 2, 270);
+                ctx.fillText(`Time: ${timeSurvived.toFixed(1)}s`, WIDTH / 2, 320);
+
+                playAgainBtn.checkHover(mouseX, mouseY);
+                homeBtn.checkHover(mouseX, mouseY);
+                playAgainBtn.draw();
+                homeBtn.draw();
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Mobile orientation adjustment
+        function adjustCanvas() {
+            if (window.innerWidth < window.innerHeight && window.innerWidth <= 600) {
+                canvas.style.transform = 'rotate(90deg)';
+                canvas.style.width = `${window.innerHeight}px`;
+                canvas.style.height = `${window.innerWidth}px`;
+                canvas.style.position = 'absolute';
+                canvas.style.top = `${(window.innerHeight - window.innerWidth) / 2}px`;
+                canvas.style.left = `${(window.innerWidth - window.innerHeight) / 2}px`;
+            } else {
+                canvas.style.transform = 'rotate(0deg)';
+                canvas.style.width = `${WIDTH}px`;
+                canvas.style.height = `${HEIGHT}px`;
+                canvas.style.position = 'static';
+            }
+        }
+
+        window.addEventListener('resize', adjustCanvas);
+        window.addEventListener('orientationchange', adjustCanvas);
+        adjustCanvas();
+
+        // Start game loop
+        gameLoop();
+    </script>
+</body>
+</html>
