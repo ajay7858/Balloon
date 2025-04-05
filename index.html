@@ -17,13 +17,7 @@
         }
         canvas {
             display: block;
-            touch-action: none; /* Prevents default touch behaviors */
-        }
-        @media (max-width: 600px) {
-            canvas {
-                width: 100vw;
-                height: 100vh;
-            }
+            touch-action: none;
         }
     </style>
 </head>
@@ -33,11 +27,10 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        // Screen dimensions
-        const WIDTH = 800;
-        const HEIGHT = 600;
-        canvas.width = WIDTH;
-        canvas.height = HEIGHT;
+        // Base dimensions (aspect ratio 4:3)
+        const BASE_WIDTH = 800;
+        const BASE_HEIGHT = 600;
+        let WIDTH, HEIGHT, scaleFactor;
 
         // Colors
         const SKY_GRADIENT_TOP = 'rgb(100, 180, 255)';
@@ -68,6 +61,68 @@
         let startTime;
         let mouseX = 0, mouseY = 0;
 
+        // Adjust canvas size
+        function adjustCanvas() {
+            const isMobile = /Mobi|Android/i.test(navigator.userAgent) || window.innerWidth <= 600;
+            const aspectRatio = BASE_WIDTH / BASE_HEIGHT;
+
+            if (isMobile && window.innerWidth < window.innerHeight) {
+                // Force horizontal on mobile
+                WIDTH = window.innerHeight;
+                HEIGHT = window.innerWidth;
+                scaleFactor = WIDTH / BASE_WIDTH;
+                canvas.width = WIDTH;
+                canvas.height = HEIGHT;
+                canvas.style.transform = 'rotate(90deg)';
+                canvas.style.width = `${window.innerHeight}px`;
+                canvas.style.height = `${window.innerWidth}px`;
+                canvas.style.position = 'absolute';
+                canvas.style.top = `${(window.innerHeight - window.innerWidth) / 2}px`;
+                canvas.style.left = `${(window.innerWidth - window.innerHeight) / 2}px`;
+            } else {
+                // Desktop or wide mobile
+                WIDTH = Math.min(window.innerWidth, BASE_WIDTH);
+                HEIGHT = WIDTH / aspectRatio;
+                if (HEIGHT > window.innerHeight) {
+                    HEIGHT = window.innerHeight;
+                    WIDTH = HEIGHT * aspectRatio;
+                }
+                scaleFactor = WIDTH / BASE_WIDTH;
+                canvas.width = WIDTH;
+                canvas.height = HEIGHT;
+                canvas.style.transform = 'rotate(0deg)';
+                canvas.style.width = `${WIDTH}px`;
+                canvas.style.height = `${HEIGHT}px`;
+                canvas.style.position = 'static';
+            }
+
+            // Adjust button positions
+            easyBtn.x = WIDTH / 2 - 160 * scaleFactor;
+            easyBtn.y = 250 * scaleFactor;
+            easyBtn.width = 320 * scaleFactor;
+            easyBtn.height = 70 * scaleFactor;
+
+            moderateBtn.x = WIDTH / 2 - 160 * scaleFactor;
+            moderateBtn.y = 340 * scaleFactor;
+            moderateBtn.width = 320 * scaleFactor;
+            moderateBtn.height = 70 * scaleFactor;
+
+            hardBtn.x = WIDTH / 2 - 160 * scaleFactor;
+            hardBtn.y = 430 * scaleFactor;
+            hardBtn.width = 320 * scaleFactor;
+            hardBtn.height = 70 * scaleFactor;
+
+            playAgainBtn.x = WIDTH / 2 - 160 * scaleFactor;
+            playAgainBtn.y = 350 * scaleFactor;
+            playAgainBtn.width = 320 * scaleFactor;
+            playAgainBtn.height = 70 * scaleFactor;
+
+            homeBtn.x = WIDTH / 2 - 160 * scaleFactor;
+            homeBtn.y = 450 * scaleFactor;
+            homeBtn.width = 320 * scaleFactor;
+            homeBtn.height = 70 * scaleFactor;
+        }
+
         // Button class
         class Button {
             constructor(x, y, width, height, text, color, hoverColor) {
@@ -84,14 +139,14 @@
             draw() {
                 ctx.fillStyle = this.isHovered ? this.hoverColor : this.color;
                 ctx.beginPath();
-                ctx.roundRect(this.x, this.y, this.width, this.height, 20);
+                ctx.roundRect(this.x, this.y, this.width, this.height, 20 * scaleFactor);
                 ctx.fill();
                 ctx.strokeStyle = BLACK;
-                ctx.lineWidth = 4;
+                ctx.lineWidth = 4 * scaleFactor;
                 ctx.stroke();
 
                 ctx.fillStyle = BLACK;
-                ctx.font = 'bold 40px Comic Sans MS';
+                ctx.font = `bold ${40 * scaleFactor}px Comic Sans MS`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText(this.text, this.x + this.width / 2, this.y + this.height / 2);
@@ -111,11 +166,11 @@
         // Balloon class
         class Balloon {
             constructor(speedRange, isBomb = false) {
-                this.radius = Math.random() * 20 + 35;
+                this.radius = (Math.random() * 20 + 35) * scaleFactor;
                 this.x = Math.random() * (WIDTH - 2 * this.radius) + this.radius;
                 this.y = HEIGHT + this.radius;
                 this.color = isBomb ? GREY : COLORS[Math.floor(Math.random() * COLORS.length)];
-                this.speed = Math.random() * (speedRange[1] - speedRange[0]) + speedRange[0];
+                this.speed = (Math.random() * (speedRange[1] - speedRange[0]) + speedRange[0]) * scaleFactor;
                 this.popped = false;
                 this.isBomb = isBomb;
                 this.popAnimation = 0;
@@ -157,15 +212,15 @@
 
                     ctx.beginPath();
                     ctx.moveTo(this.x, this.y - this.radius);
-                    ctx.lineTo(this.x - 8, this.y - this.radius - 15);
-                    ctx.lineTo(this.x + 8, this.y - this.radius - 15);
+                    ctx.lineTo(this.x - 8 * scaleFactor, this.y - this.radius - 15 * scaleFactor);
+                    ctx.lineTo(this.x + 8 * scaleFactor, this.y - this.radius - 15 * scaleFactor);
                     ctx.closePath();
                     ctx.fillStyle = `rgba(${this.color.match(/\d+/g).map(c => Math.floor(c / 2)).join(',')}, 1)`;
                     ctx.fill();
 
                     if (this.isBomb) {
                         ctx.fillStyle = WHITE;
-                        ctx.font = 'bold 28px Comic Sans MS';
+                        ctx.font = `bold ${28 * scaleFactor}px Comic Sans MS`;
                         ctx.textAlign = 'center';
                         ctx.textBaseline = 'middle';
                         ctx.fillText('BOOM', this.x, this.y);
@@ -183,30 +238,30 @@
         // Draw hearts
         function drawHearts(lives) {
             for (let i = 0; i < 3; i++) {
-                let x = WIDTH - (4 - i) * (40 + 15);
-                let y = 25;
-                let centerX = x + 20;
-                let centerY = y + 20;
+                let x = WIDTH - (4 - i) * (40 * scaleFactor + 15 * scaleFactor);
+                let y = 25 * scaleFactor;
+                let centerX = x + 20 * scaleFactor;
+                let centerY = y + 20 * scaleFactor;
 
                 if (i < lives) {
                     ctx.fillStyle = RED;
                     ctx.beginPath();
-                    ctx.arc(centerX - 10, centerY - 6, 10, Math.PI, 0);
-                    ctx.arc(centerX + 10, centerY - 6, 10, Math.PI, 0);
-                    ctx.lineTo(centerX, centerY + 20);
+                    ctx.arc(centerX - 10 * scaleFactor, centerY - 6 * scaleFactor, 10 * scaleFactor, Math.PI, 0);
+                    ctx.arc(centerX + 10 * scaleFactor, centerY - 6 * scaleFactor, 10 * scaleFactor, Math.PI, 0);
+                    ctx.lineTo(centerX, centerY + 20 * scaleFactor);
                     ctx.closePath();
                     ctx.fill();
 
                     ctx.beginPath();
-                    ctx.arc(centerX - 10, centerY - 10, 5, 0, Math.PI * 2);
+                    ctx.arc(centerX - 10 * scaleFactor, centerY - 10 * scaleFactor, 5 * scaleFactor, 0, Math.PI * 2);
                     ctx.fillStyle = 'rgba(255, 150, 150, 1)';
                     ctx.fill();
                 } else {
                     ctx.fillStyle = 'rgb(220, 220, 220)';
                     ctx.beginPath();
-                    ctx.arc(centerX - 10, centerY - 6, 10, Math.PI, 0);
-                    ctx.arc(centerX + 10, centerY - 6, 10, Math.PI, 0);
-                    ctx.lineTo(centerX, centerY + 20);
+                    ctx.arc(centerX - 10 * scaleFactor, centerY - 6 * scaleFactor, 10 * scaleFactor, Math.PI, 0);
+                    ctx.arc(centerX + 10 * scaleFactor, centerY - 6 * scaleFactor, 10 * scaleFactor, Math.PI, 0);
+                    ctx.lineTo(centerX, centerY + 20 * scaleFactor);
                     ctx.closePath();
                     ctx.fill();
                 }
@@ -223,34 +278,40 @@
 
             ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
             ctx.beginPath();
-            ctx.arc(140, 100, 30, 0, Math.PI * 2);
-            ctx.arc(180, 100, 40, 0, Math.PI * 2);
-            ctx.arc(160, 120, 30, 0, Math.PI * 2);
+            ctx.arc(140 * scaleFactor, 100 * scaleFactor, 30 * scaleFactor, 0, Math.PI * 2);
+            ctx.arc(180 * scaleFactor, 100 * scaleFactor, 40 * scaleFactor, 0, Math.PI * 2);
+            ctx.arc(160 * scaleFactor, 120 * scaleFactor, 30 * scaleFactor, 0, Math.PI * 2);
             ctx.fill();
 
             ctx.beginPath();
-            ctx.arc(590, 120, 30, 0, Math.PI * 2);
-            ctx.arc(630, 120, 40, 0, Math.PI * 2);
-            ctx.arc(610, 140, 30, 0, Math.PI * 2);
+            ctx.arc(590 * scaleFactor, 120 * scaleFactor, 30 * scaleFactor, 0, Math.PI * 2);
+            ctx.arc(630 * scaleFactor, 120 * scaleFactor, 40 * scaleFactor, 0, Math.PI * 2);
+            ctx.arc(610 * scaleFactor, 140 * scaleFactor, 30 * scaleFactor, 0, Math.PI * 2);
             ctx.fill();
         }
 
-        // Buttons
-        const easyBtn = new Button(WIDTH / 2 - 160, 250, 320, 70, "Easy", GREEN, 'rgb(150, 255, 150)');
-        const moderateBtn = new Button(WIDTH / 2 - 160, 340, 320, 70, "Moderate", YELLOW, 'rgb(255, 255, 100)');
-        const hardBtn = new Button(WIDTH / 2 - 160, 430, 320, 70, "Hard", RED, 'rgb(255, 150, 150)');
-        const playAgainBtn = new Button(WIDTH / 2 - 160, 350, 320, 70, "Play Again", GREEN, 'rgb(150, 255, 150)');
-        const homeBtn = new Button(WIDTH / 2 - 160, 450, 320, 70, "Home", BLUE, 'rgb(150, 200, 255)');
+        // Buttons (initialized with placeholder values, adjusted in adjustCanvas)
+        const easyBtn = new Button(0, 0, 0, 0, "Easy", GREEN, 'rgb(150, 255, 150)');
+        const moderateBtn = new Button(0, 0, 0, 0, "Moderate", YELLOW, 'rgb(255, 255, 100)');
+        const hardBtn = new Button(0, 0, 0, 0, "Hard", RED, 'rgb(255, 150, 150)');
+        const playAgainBtn = new Button(0, 0, 0, 0, "Play Again", GREEN, 'rgb(150, 255, 150)');
+        const homeBtn = new Button(0, 0, 0, 0, "Home", BLUE, 'rgb(150, 200, 255)');
 
         // Event handling
         function getPosition(e, isTouch = false) {
             const rect = canvas.getBoundingClientRect();
             const clientX = isTouch ? e.touches[0].clientX : e.clientX;
             const clientY = isTouch ? e.touches[0].clientY : e.clientY;
-            return {
-                x: (clientX - rect.left) * (WIDTH / rect.width),
-                y: (clientY - rect.top) * (HEIGHT / rect.height)
-            };
+            let x = (clientX - rect.left) * (WIDTH / rect.width);
+            let y = (clientY - rect.top) * (HEIGHT / rect.height);
+
+            if (canvas.style.transform === 'rotate(90deg)') {
+                // Adjust coordinates for 90-degree rotation
+                const tempX = x;
+                x = HEIGHT - y;
+                y = tempX;
+            }
+            return { x, y };
         }
 
         canvas.addEventListener('mousedown', (e) => {
@@ -310,11 +371,12 @@
                         if (balloons[i].isBomb) {
                             bombTriggered = true;
                             state = 'gameOver';
+                            break;
                         } else {
                             balloons[i].pop();
                             score += 1 + { easy: 0, moderate: 1, hard: 2 }[difficulty];
+                            break;
                         }
-                        break;
                     }
                 }
             } else if (state === 'gameOver') {
@@ -335,6 +397,7 @@
             bombTriggered = false;
             startTime = Date.now();
             state = 'game';
+            adjustCanvas();
         }
 
         // Game loop
@@ -343,12 +406,12 @@
 
             if (state === 'home') {
                 ctx.fillStyle = BLACK;
-                ctx.font = 'bold 80px Comic Sans MS';
+                ctx.font = `bold ${80 * scaleFactor}px Comic Sans MS`;
                 ctx.textAlign = 'center';
-                ctx.fillText('Balloon Pop', WIDTH / 2, 100);
-                ctx.fillText('Adventure', WIDTH / 2, 180);
-                ctx.font = '28px Comic Sans MS';
-                ctx.fillText('Save your hearts, avoid the bombs!', WIDTH / 2, 230);
+                ctx.fillText('Balloon Pop', WIDTH / 2, 100 * scaleFactor);
+                ctx.fillText('Adventure', WIDTH / 2, 180 * scaleFactor);
+                ctx.font = `${28 * scaleFactor}px Comic Sans MS`;
+                ctx.fillText('Save your hearts, avoid the bombs!', WIDTH / 2, 230 * scaleFactor);
 
                 easyBtn.checkHover(mouseX, mouseY);
                 moderateBtn.checkHover(mouseX, mouseY);
@@ -383,17 +446,17 @@
                 }
 
                 ctx.fillStyle = BLACK;
-                ctx.font = '28px Comic Sans MS';
+                ctx.font = `${28 * scaleFactor}px Comic Sans MS`;
                 ctx.textAlign = 'left';
-                ctx.fillText(`Score: ${score}`, 15, 35);
-                ctx.fillText(`${difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}`, 15, 65);
+                ctx.fillText(`Score: ${score}`, 15 * scaleFactor, 35 * scaleFactor);
+                ctx.fillText(`${difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}`, 15 * scaleFactor, 65 * scaleFactor);
                 drawHearts(lives);
 
                 if (dragging) {
                     ctx.beginPath();
-                    ctx.arc(mouseX, mouseY, 10, 0, Math.PI * 2);
+                    ctx.arc(mouseX, mouseY, 10 * scaleFactor, 0, Math.PI * 2);
                     ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-                    ctx.lineWidth = 2;
+                    ctx.lineWidth = 2 * scaleFactor;
                     ctx.stroke();
                 }
 
@@ -403,13 +466,13 @@
                 ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
                 ctx.fillStyle = WHITE;
-                ctx.font = 'bold 80px Comic Sans MS';
+                ctx.font = `bold ${80 * scaleFactor}px Comic Sans MS`;
                 ctx.textAlign = 'center';
-                ctx.fillText('Game Over!', WIDTH / 2, 150);
-                ctx.font = '28px Comic Sans MS';
-                ctx.fillText(bombTriggered ? 'Bomb Exploded!' : 'No Hearts Left!', WIDTH / 2, 220);
-                ctx.fillText(`Score: ${score}`, WIDTH / 2, 270);
-                ctx.fillText(`Time: ${timeSurvived.toFixed(1)}s`, WIDTH / 2, 320);
+                ctx.fillText('Game Over!', WIDTH / 2, 150 * scaleFactor);
+                ctx.font = `${28 * scaleFactor}px Comic Sans MS`;
+                ctx.fillText(bombTriggered ? 'Bomb Exploded!' : 'No Hearts Left!', WIDTH / 2, 220 * scaleFactor);
+                ctx.fillText(`Score: ${score}`, WIDTH / 2, 270 * scaleFactor);
+                ctx.fillText(`Time: ${timeSurvived.toFixed(1)}s`, WIDTH / 2, 320 * scaleFactor);
 
                 playAgainBtn.checkHover(mouseX, mouseY);
                 homeBtn.checkHover(mouseX, mouseY);
@@ -420,23 +483,7 @@
             requestAnimationFrame(gameLoop);
         }
 
-        // Mobile orientation adjustment
-        function adjustCanvas() {
-            if (window.innerWidth < window.innerHeight && window.innerWidth <= 600) {
-                canvas.style.transform = 'rotate(90deg)';
-                canvas.style.width = `${window.innerHeight}px`;
-                canvas.style.height = `${window.innerWidth}px`;
-                canvas.style.position = 'absolute';
-                canvas.style.top = `${(window.innerHeight - window.innerWidth) / 2}px`;
-                canvas.style.left = `${(window.innerWidth - window.innerHeight) / 2}px`;
-            } else {
-                canvas.style.transform = 'rotate(0deg)';
-                canvas.style.width = `${WIDTH}px`;
-                canvas.style.height = `${HEIGHT}px`;
-                canvas.style.position = 'static';
-            }
-        }
-
+        // Initial setup and event listeners
         window.addEventListener('resize', adjustCanvas);
         window.addEventListener('orientationchange', adjustCanvas);
         adjustCanvas();
